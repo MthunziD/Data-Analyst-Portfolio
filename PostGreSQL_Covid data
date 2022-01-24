@@ -1,0 +1,254 @@
+/*  To confirm if we have the right deaths table
+SELECT *
+FROM public.deaths
+ORDER BY 3,4 */
+
+/*  Comfirm the right vaccination table
+SELECT *
+FROM public.vaccinations
+ORDER BY 3,4 */
+
+-- Select the Data we are going to be using, ordered by Location
+SELECT 
+	location, date, total_cases, new_cases, total_deaths, population
+FROM public.deaths
+	ORDER BY 1, 2;
+	
+-- Looking at Total Cases vs Total deaths (Deathpercentage), population vs cases (infection rate)
+ 
+SELECT 
+	location, date, total_cases, total_deaths, (total_deaths/total_cases) * 100 AS death_percentage
+From public.deaths
+WHERE 
+	location = 'South Africa'
+ORDER BY 1,2;
+
+-- Looking at the Population vs Total cases (infection rate), Chances of you catching Covid in South Africa
+
+SELECT 
+	location, date, total_cases, population, (total_cases/population) * 100 AS infection_rate
+From public.deaths
+WHERE 
+	location = 'South Africa'
+ORDER BY 1,2;
+
+-- Looking at the Population vs Total cases (infection rate), Chances of you catching Covid in USA
+
+SELECT 
+	location, date, total_cases, population, (total_cases/population) * 100 AS infection_rate
+From public.deaths
+WHERE 
+	location = 'United States'
+ORDER BY 2,3;
+
+--Country with the highest Infection Rate compared to Population,
+
+SELECT 
+	location, population, MAX(total_cases)AS HighInfectionCount, MAX((total_cases/population)) * 100 AS infection_rate
+From public.deaths
+--WHERE location = 'South Africa'
+
+Group BY 
+	location, population, continent IS NOT NULL
+Order by 4 DESC;
+
+--Countries with the Highest Death Count per Population.
+-- Data cleaning data comes through wehn you see a location are grouped by Continents
+
+SELECT 
+	location, MAX(total_deaths) AS TotaDeathCount
+From public.deaths
+WHERE continent IS NOT NULL
+
+Group BY 
+	location
+Order by TotaDeathCount DESC;
+
+--Break Down the total death by Continent
+
+---Showing the highest death count by continebt
+
+SELECT 
+	continent, MAX(total_deaths) AS TotaDeathCount
+From public.deaths
+WHERE 
+	continent IS NOT NULL
+Group BY 
+	continent
+Order by TotaDeathCount DESC;
+
+--Global Numbers
+
+
+--Aggreagate Functions, Grop by date and sum up the daily cases. Viz Top 15 countries deathRate vs the Global death rate
+
+SELECT 
+	 date, SUM(new_cases) as daily_New_Cases, SUM(new_deaths) as daily_New_Deaths,SUM(new_deaths)/SUM(new_cases) *100 as daily_death_Rate
+FROM
+	public.deaths
+WHERE 
+	continent IS NOT NULL
+GROUP BY date	
+ORDER BY 1,2;
+
+--Global Death rate (up to 12 January 2022)
+SELECT 
+	 SUM(new_cases) as daily_New_Cases, SUM(new_deaths) as daily_New_Deaths,SUM(new_deaths)/SUM(new_cases) *100 as daily_death_Rate
+FROM
+	public.deaths
+WHERE 
+	continent IS NOT NULL	
+ORDER BY 1,2;
+
+--- Vaccination Table 
+--Overview
+SELECT *
+FROM public.vaccinations;
+
+--Joining(Join Statements) Vaccinationsand Deaths table, Create allias for the tables(creating a short name for the table)
+-- JOIN statemens defaults to INNER JOIN, where clolumn loaction and death are the sme in both tables
+SELECT *
+FROM 
+	public.deaths dea
+JOIN
+	public.vaccinations vac
+	ON
+		dea.location = vac.location AND dea.date = vac.date
+WHERE 
+	dea.location = 'South Africa';
+		
+--Pull the number of daily new_cases, new_deaths, new_tests, people_vaccinated in South Africa
+
+SELECT 
+	dea.date, new_cases, new_deaths, new_tests, new_vaccinations
+FROM 
+	public.deaths dea
+JOIN
+	public.vaccinations vac
+	ON
+		dea.location = vac.location AND dea.date = vac.date
+WHERE 
+	vac.location = 'South Africa'
+ORDER BY date;
+
+--Pull the number of daily new_cases, new_deaths, new_tests, people_vaccinated in South Africa after vaccines started
+
+SELECT 
+	dea.date, new_cases, new_deaths, new_tests, new_vaccinations
+FROM 
+	public.deaths dea
+JOIN
+	public.vaccinations vac
+	ON
+		dea.location = vac.location AND dea.date = vac.date
+WHERE 
+	vac.new_vaccinations IS NOT NULL and dea.location = 'South Africa'
+ORDER BY date;
+
+-- Total population vs vaccinations
+
+
+
+SELECT 
+	dea.continent, dea.location,dea.date, dea.population, vac.new_vaccinations
+	--MAX(dea.population), SUM(vac.people_vaccinated)/MAX(dea.population) *100 as vaccinationRate
+FROM 
+	public.deaths dea
+JOIN
+	public.vaccinations vac
+	ON
+		dea.location = vac.location AND dea.date = vac.date
+WHERE dea.continent IS NOT NULL
+--GROUP BY  vac.people_vaccinated
+ORDER BY 1,2,3;
+
+-- COUNT AND ADD UP DAILY NEW VACCINATIONS. Partition by - Every time a new location appears it starts over. Rolling daily vaccinations
+
+SELECT 
+	dea.continent, dea.location,dea.date, dea.population, vac.new_vaccinations, 
+	SUM(vac.new_vaccinations) OVER (Partition by dea.location ORDER By dea.location, dea.date) AS Rolling_daily_vaccs
+ 	--MAX(dea.population), SUM(vac.people_vaccinated)/MAX(dea.population) *100 as vaccinationRate
+FROM 
+	public.deaths dea
+JOIN
+	public.vaccinations vac
+	ON
+		dea.location = vac.location AND dea.date = vac.date
+WHERE dea.location = 'South Africa'
+--GROUP BY  vac.people_vaccinated
+ORDER BY 2,3;
+
+
+--  Rolling daily vaccinations vs population. Use a SQL Server CTE (Common Table expression) and make use of temporary tables.
+--Subquesries and Temporary teables
+WITH PopvsVacc (continent, location, date, population, new_vaccinations, Rolling_daily_vaccs) AS
+		(
+		SELECT 
+			dea.continent, dea.location,dea.date, dea.population, vac.new_vaccinations, 
+			SUM(vac.new_vaccinations) OVER (Partition by dea.location ORDER By dea.location, dea.date) AS Rolling_daily_vaccs
+			--MAX(dea.population), SUM(vac.people_vaccinated)/MAX(dea.population) *100 as vaccinationRate
+		FROM 
+			public.deaths dea
+		JOIN
+			public.vaccinations vac
+			ON
+				dea.location = vac.location AND dea.date = vac.date
+		WHERE dea.location = 'South Africa'
+		--GROUP BY  vac.people_vaccinated
+		--ORDER BY 2,3
+	)
+SELECT *,Rolling_daily_vaccs / population * 100 as vaccs_rate
+FROM PopvsVacc;
+
+
+/*--Temporay tables
+
+CREATE TABLE public.PercentPopulationVaccinated
+(
+	continent text,
+	location text ,
+	date date,
+	population double precision,
+	new_vaccinations double precision,
+	Rolling_daily_vaccs integer 
+)
+
+Insert into PercentPopulationVaccinated 
+SELECT 
+		dea.continent, dea.location,dea.date, dea.population, vac.new_vaccinations, 
+			SUM(vac.new_vaccinations) OVER (Partition by dea.location ORDER By dea.location, dea.date) AS Rolling_daily_vaccs
+			--MAX(dea.population), SUM(vac.people_vaccinated)/MAX(dea.population) *100 as vaccinationRate
+		FROM 
+			public.deaths dea
+		JOIN
+			public.vaccinations vac
+			ON
+				dea.location = vac.location AND dea.date = vac.date
+		WHERE dea.continent is not null
+		--GROUP BY  vac.people_vaccinated
+		--ORDER BY 2,3
+	
+	
+SELECT *
+FROM PercentPopulationVaccinated;*/
+
+--Create View for Viz
+
+/*CREATE View VaccinatedPop as
+SELECT dea.continent, dea.location,dea.date, dea.population, vac.new_vaccinations, 
+			SUM(vac.new_vaccinations) OVER (Partition by dea.location ORDER By dea.location, dea.date) AS Rolling_daily_vaccs
+			--MAX(dea.population), SUM(vac.people_vaccinated)/MAX(dea.population) *100 as vaccinationRate
+		FROM 
+			public.deaths dea
+		JOIN
+			public.vaccinations vac
+			ON
+				dea.location = vac.location AND dea.date = vac.date
+		WHERE dea.continent is not null
+		--GROUP BY  vac.people_vaccinated
+		--ORDER BY 2,3
+		;*/
+		
+		SELECT * FROM public.vaccinatedpop
+
+
